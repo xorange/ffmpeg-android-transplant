@@ -1,0 +1,11 @@
+./obj/local/armeabi/objs/ffmpeg/
+
+libavcodec/arm/ac3dsp_init_arm.o: 
+
+In function `ff_ac3dsp_init_arm':
+
+/home/orange/workspace/graduating/ffmpegDemo/android/jni/
+libavcodec/arm/ac3dsp_init_arm.c:66:
+
+undefined reference to `ff_ac3_update_bap_counts_arm'
+
