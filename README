@@ -1,0 +1,147 @@
+this is a ffmpeg transplanting project on Android. 
+
+
+ffmpeg version:
+orange@orange:~/workspace/graduating/ffmpegtransplant/first/jni$ ./version.sh 
+git-2012-02-15-54bd074
+
+
+android:
+orange@orange:~/workspace/graduating/ffmpegtransplant/first/jni$ ls ~/workspace/android/
+android-ndk-r7  android-sdk-linux
+
+
+the transplanting project directory tree is like this:
+/
+	jni/
+	libs/
+	obj/
+	ndkbuildLog	//messages after "$(NDK)/ndk-build"
+	README
+	temp		//useless
+	transplantLog	//error during the transplanting work
+
+
+jni/
+	libavcodec/
+	libavformat/
+	(and other ffmpeg source)
+	Android.mk
+	config.sh	//one of the source, just to specify
+	(meterials from couple references)
+
+
+transplanting:
+"cd" into the project root
+1. configure
+cd jni/
+(edit config.sh for the proper configuration you want)
+chmod +x config.sh && sudo ./config.sh
+
+2. android make
+i. 	download android-ndk-r7
+ii.	read the $(NDK)/docs
+iii.	about the Android.mk:
+---
+LOCAL_CFLAGS := -DHAVE_AV_CONFIG_H -std=c99 -mfloat-abi=softfp -mfpu=neon -marm -march=armv7-a -mtune=cortex-a8
+CFLAGS += -mfpu=neon
+
+TARGET_ARCH_ABI :=armeabi-v7a
+---
+These two system variables are tested OK. But they are only OK on Android 4.0 and failed on 2.2. I don't know why yet. By saying tested OK, I mean that this piece of code, which contains headers including, variables declaration and function calling:
+---
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libswscale/swscale.h"
+
+#include <string.h>
+#include <jni.h>
+#include <pthread.h>
+
+jstring
+Java_com_orange_mp_MediaPlayerActivity_stringFromJNI( JNIEnv* env,
+                                                  jobject thiz )
+{
+
+  AVFormatContext *pFormatCtx;
+  int             i, videoStream;
+  AVCodecContext  *pCodecCtx;
+  AVCodec         *pCodec;
+  AVFrame         *pFrame; 
+  AVFrame         *pFrameRGB;
+  AVPacket        packet;
+  int             frameFinished;
+  int             numBytes;
+  uint8_t         *buffer;
+  static struct SwsContext *img_convert_ctx;
+
+  // Register all formats and codecs
+	av_register_all();
+
+ return (*env)->NewStringUTF(env, "please succeed...");
+}
+---
+works.
+You could see how struggle I am with that string I return.
+
+As for the rest of the Android.mk, you should not purely copy it and start your own transplanting project because those are all based on the ffmpeg you are using. I'm using the following libraries of ffmpeg (shown at the end of Android.mk):
+---
+LOCAL_SRC_FILES := \
+$(SWSCALE_SRC_FILES) \
+$(AVUTIL_SRC_FILES) \
+$(AVCODEC_SRC_FILES) \
+$(AVCODEC_ARM_SRC_FILES) \
+$(AVFORMAT_SRC_FILES)
+---
+I only use one Android.mk, which is not a very graceful way and I know, and all these variables are manualy copied from the GNU makefile from the corresponding directories in ffmpeg. If you are using a different version of ffmpeg, you should do the same or, to be more graceful, write multiple Android.mk to illustrate a better make rules.
+
+
+HOW TO READ THE MAKE RULES:
+(The following content assumes that you know nothing as I am when first starting this project. It will save your time reading the makefile. For more GNU make information, a GNU make reference and tutorial is recommended.)
+First you'll see an important include:
+---
+include $(LOCAL_PATH)/config.mak
+---
+whose content is based on the configuration you specified. 
+
+Now let's take a look at a part of the Android.mk:
+---
+SWSCALE_C_FILES = options.c \
+	rgb2rgb.c \
+	swscale.c \
+	utils.c \
+	yuv2rgb.c \
+	swscale_unscaled.c \
+	swscale_internal.h
+
+SWSCALE_C_FILES-$(ARCH_BFIN)          +=  bfin/internal_bfin.c     \
+                               bfin/swscale_bfin.c      \
+                               bfin/yuv2rgb_bfin.c
+SWSCALE_C_FILES-$(CONFIG_MLIB)        +=  mlib/yuv2rgb_mlib.c
+SWSCALE_C_FILES-$(HAVE_ALTIVEC)       +=  ppc/swscale_altivec.c    \
+                               ppc/yuv2rgb_altivec.c    \
+                               ppc/yuv2yuv_altivec.c
+SWSCALE_C_FILES-$(HAVE_MMX)           +=  x86/rgb2rgb.c            \
+                               x86/swscale_mmx.c        \
+                               x86/yuv2rgb_mmx.c
+SWSCALE_C_FILES-$(HAVE_VIS)           +=  sparc/yuv2rgb_vis.c
+SWSCALE_C_FILES-$(HAVE_YASM)          +=  x86/scale.c
+
+SWSCALE_C_FILES += $(SWSCALE_C_FILES-yes)
+SWSCALE_SRC_FILES = $(addprefix libswscale/, $(sort $(SWSCALE_C_FILES)))
+...
+LOCAL_SRC_FILES := \
+$(SWSCALE_SRC_FILES) \
+...
+---
+LOCAL_SRC_FILES is a system variable of android-ndk. So SWSCALE_SRC_FILES includes the final files to be made. And SWSCALE_SRC_FILES is "libswscale/(sorted SWSCALE_C_FILES)". And what's SWSCALE_C_FILES?
+The variables in the "()" following SWSCALE_C_FILES is defined in config.mak and they are all either yes or no, meaning which module is enable. So for those enabled module, they are all "+="-ed in SWSCALE_C_FILES-yes. So it's clear.
+By the way, I think this way is just brilliant.
+
+
+Author:
+Oliver ZQ. Xu
+orange-22@126.com
+
+Main Reference:
+http://www.cnblogs.com/scottwong/archive/2010/12/17/1909455.html
